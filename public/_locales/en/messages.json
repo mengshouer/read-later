@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Read Later",
+    "description": "Extension name."
+  },
+  "description": {
+    "message": "Save links and reading positions, grouped by domain.",
+    "description": "Extension description shown in the browser and the store."
+  },
+  "commandSaveCurrentTab": {
+    "message": "Save the current tab for later",
+    "description": "Keyboard shortcut description on chrome://extensions/shortcuts."
+  }
+}

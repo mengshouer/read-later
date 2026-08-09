@@ -1,0 +1,263 @@
+<!doctype html>
+<!--
+  Layout probe. Not part of the build — open it directly in a browser
+  (file:///.../read-later/scripts/layout-probe.html) and read the boxes off the real
+  stylesheet instead of deriving them from the CSS by hand.
+
+  It exists because the popup's whole layout is justified by one number: how far the
+  pointer has to travel from the toolbar icon to the first clickable row. That number was
+  arithmetic until this file measured it (25.4px), and measuring is also what caught the
+  footer collapsing to 178px once two warnings were showing at once.
+
+  It hand-writes the exact DOM that `ListApp` produces and links the real stylesheet, so
+  any CSS change shows up here. English on the left because its longer nav labels are the
+  overflow risk. Useful expressions once it is open:
+
+    document.querySelector('#en .row').getBoundingClientRect()
+    document.querySelector('#en .list').getBoundingClientRect().height
+
+  All content here is synthetic and must stay that way. This file was first written by
+  copying rows out of a real read-later export, which put real people's account URLs into
+  the repository; it now uses only the domains RFC 2606 reserves for documentation, and
+  `tests/no-real-data.test.ts` checks that it stays that way.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Read Later — layout probe</title>
+    <link rel="stylesheet" href="../components/app.css" />
+    <style>
+      body { display: flex; gap: 24px; padding: 20px; align-items: flex-start; }
+      .probe-label { font: 12px monospace; margin-bottom: 6px; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <div class="probe-label">en</div>
+      <div class="app app--popup" id="en">
+        <div class="list">
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">A short note on layout probes</div>
+              <div class="row__meta"><span class="row__loc">example.com/notes/layout</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 1</span>
+              <span class="badge badge--informational">15%</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">tag/SOMETAG</div>
+              <div class="row__meta"><span class="row__loc">example.com/tag/SOMETAG</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 2</span>
+              <span class="badge badge--none">—</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">A title long enough that it has to be truncated with an ellipsis</div>
+              <div class="row__meta"><span class="row__loc">example.com/a-location-line-long-enough-to-be-truncated-as-well</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 3</span>
+              <span class="badge badge--progress">13%</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">_a_snake_cased_name</div>
+              <div class="row__meta"><span class="row__loc">example.com/_a_snake_cased_name</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 3</span>
+              <span class="badge badge--none">—</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">Fifth queued item</div>
+              <div class="row__meta"><span class="row__loc">example.com/five</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 4</span>
+              <span class="badge badge--none">—</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">plainhandle</div>
+              <div class="row__meta"><span class="row__loc">example.com/plainhandle</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 5</span>
+              <span class="badge badge--none">—</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">Seventh item, medium title</div>
+              <div class="row__meta"><span class="row__loc">example.com/seven</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 6</span>
+              <span class="badge badge--informational">35%</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">another queued article title here</div>
+              <div class="row__meta"><span class="row__loc">example.com/another</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">Jul 6</span>
+              <span class="badge badge--none">—</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">Delete</button>
+              <button>Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="chrome">
+          <div class="bar bar--search">
+            <input class="search" type="search" placeholder="Search title or URL" />
+          </div>
+          <div class="bar bar--tabs">
+            <button class="tab tab--active">Unread 262</button>
+            <button class="tab">Archived 0</button>
+          </div>
+          <div class="bar bar--controls">
+            <button>Added</button>
+            <button>&uarr;</button>
+            <button class="toggle toggle--on">Grouped</button>
+            <button class="toggle">Actions</button>
+            <span class="spacer"></span>
+            <button>Select</button>
+          </div>
+        </div>
+
+        <footer class="bar bar--foot">
+          <span class="foot__usage">53.2 KB used</span>
+          <div class="foot__nav">
+            <button title="Switch language">&#20013;</button>
+            <button title="Side panel">Side panel</button>
+            <button title="Full page">Full page</button>
+            <button title="Settings">Settings</button>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <div>
+      <div class="probe-label">zh</div>
+      <div class="app app--popup" id="zh">
+        <div class="list">
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">A short note on layout probes</div>
+              <div class="row__meta"><span class="row__loc">example.com/notes/layout</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">7月1日</span>
+              <span class="badge badge--informational">15%</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">&#21024;&#38500;</button>
+              <button>&#22797;&#21046;</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="favicon" style="background-color: hsl(203 52% 44%)">E</span>
+            <div class="row__body">
+              <div class="row__title">tag/SOMETAG</div>
+              <div class="row__meta"><span class="row__loc">example.com/tag/SOMETAG</span></div>
+            </div>
+            <div class="row__right">
+              <span class="row__date">7月2日</span>
+              <span class="badge badge--none">—</span>
+            </div>
+            <div class="row__actions">
+              <button class="danger">&#21024;&#38500;</button>
+              <button>&#22797;&#21046;</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="chrome">
+          <div class="bar bar--search">
+            <input class="search" type="search" placeholder="&#25628;&#32034;&#26631;&#39064;&#25110;&#38142;&#25509;" />
+          </div>
+          <div class="bar bar--tabs">
+            <button class="tab tab--active">&#26410;&#35835; 262</button>
+            <button class="tab">&#24050;&#24402;&#26723; 0</button>
+          </div>
+          <div class="bar bar--controls">
+            <button>添加时间</button>
+            <button>&uarr;</button>
+            <button class="toggle toggle--on">&#20998;&#32452;</button>
+            <button class="toggle">&#25805;&#20316;</button>
+            <span class="spacer"></span>
+            <button>&#25209;&#37327;</button>
+          </div>
+        </div>
+
+        <footer class="bar bar--foot">
+          <span class="foot__usage">&#24050;&#29992; 53.2 KB</span>
+          <div class="foot__nav">
+            <button title="&#20999;&#25442;&#35821;&#35328;">EN</button>
+            <button title="&#20391;&#26639;">&#20391;&#26639;</button>
+            <button title="&#20840;&#23631;">&#20840;&#23631;</button>
+            <button title="&#35774;&#32622;">&#35774;&#32622;</button>
+          </div>
+          <!-- Only the zh panel carries this, so both footer states are visible side by
+               side: it appears only while a delete is waiting to be undone. -->
+          <div class="foot__undo">
+            <span>已删除 3 条</span>
+            <button title="原样放回，归档里的也回归档。保留到下次删除或浏览器关闭为止。">撤销</button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </body>
+</html>

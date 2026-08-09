@@ -1,0 +1,83 @@
+! Title: Read Later built-in rules
+! Description: Only the rules the subscribed upstream lists do not already carry, or ship in a form a uBO-compatible engine discards. Every line was checked against AdGuard's URL Tracking Protection filter — none of it is here because it seemed like a good idea.
+! Expires: 30 days
+
+! ---------------------------------------------------------------------------
+! Params AdGuard's list ships in a form uBO throws away.
+!
+! It writes them as `$denyallow=<sites>,removeparam=<param>` with no `$domain`,
+! and uBO voids the entire filter in that case:
+!
+!   case NODE_TYPE_NET_OPTION_NAME_DENYALLOW:
+!       realBad = isNegated || hasValue === false ||
+!           this.getBranchFromType(NODE_TYPE_NET_OPTION_NAME_FROM) === 0;
+!
+! Same code in the current uBO master and in the engine `scripts/filter-probe.mjs`
+! diffs against, and measured both ways: with `$domain` the rule applies, without it
+! nothing happens. 21 rules are affected and the six canonical `utm_*` params are
+! among them — so subscribing to that list does NOT strip utm_source.
+!
+! Restated below as plain rules, which is the uBO-valid way to say the same thing.
+!
+! How much of AdGuard's per-site sparing survives that, measured rather than assumed:
+! the 21 rules name 268 host-param pairs, and only 70 of those also have a matching `@@`
+! exception in the list. The exceptions that DO exist are valid, we honour them, and since
+! every list compiles into one pool they go on protecting those sites. The rest do not
+! survive — 193 of the 198 are `utm_campaign` on the `google.*` ccTLDs, where AdGuard
+! presumably spares it to avoid breaking a redirect. For a dedup key that is harmless and
+! arguably wanted: two google URLs differing only in `utm_campaign` SHOULD be one entry.
+! ---------------------------------------------------------------------------
+$removeparam=utm_source
+$removeparam=utm_medium
+$removeparam=utm_campaign
+$removeparam=utm_content
+$removeparam=utm_term
+$removeparam=utm_referrer
+$removeparam=_ga
+$removeparam=cmpid
+$removeparam=cuid
+$removeparam=a8
+$removeparam=adj_t
+$removeparam=irclickid
+$removeparam=tduid
+$removeparam=erid
+$removeparam=vc_lpp
+$removeparam=oly_enc_id
+$removeparam=elq
+$removeparam=elqaid
+$removeparam=elqat
+$removeparam=elqak
+$removeparam=elqTrackId
+
+! ---------------------------------------------------------------------------
+! Params no upstream URL-tracking list carries at all
+! ---------------------------------------------------------------------------
+$removeparam=li_fat_id
+$removeparam=epik
+$removeparam=__twitter_impression
+$removeparam=trkCampaign
+$removeparam=is_story_h5
+$removeparam=mid_from
+$removeparam=wxopenid
+$removeparam=wxfid
+$removeparam=s_kwcid
+$removeparam=/^sharer_/
+$removeparam=/^at_custom/
+
+! ---------------------------------------------------------------------------
+! Sites whose query strings are reliably noise, and which upstream leaves alone.
+! `||host^` already covers every subdomain, so this is one line where the old
+! rule format needed two.
+! ---------------------------------------------------------------------------
+||zhihu.com^$removeparam
+||juejin.cn^$removeparam
+||segmentfault.com^$removeparam
+||douban.com^$removeparam
+||weibo.com^$removeparam
+||x.com^$removeparam
+||twitter.com^$removeparam
+||reddit.com^$removeparam
+
+! v2ex paginates a thread with `?p=`, so clearing the query here would merge page 2
+! into page 1. This is what the old `keep: p` becomes: remove everything that is NOT p.
+||v2ex.com^$removeparam=~/^p=/

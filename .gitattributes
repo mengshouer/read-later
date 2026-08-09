@@ -1,0 +1,6 @@
+# Line endings are a property of the repository, not of whoever cloned it. Without this,
+# a contributor whose `core.autocrlf` differs commits CRLF into files everyone else has as LF.
+* text=auto eol=lf
+
+# Binary, so git must never try to normalise them.
+*.png binary

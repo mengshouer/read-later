@@ -1,0 +1,32 @@
+{
+  "name": "read-later",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Read Later — save links and reading position, grouped by domain",
+  "author": "mengshouer",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "icons": "node scripts/generate-icons.mjs",
+    "probe:filters": "node scripts/filter-probe.mjs",
+    "convert:legacy": "node scripts/convert-legacy.mjs",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "preact": "^10.29.7"
+  },
+  "devDependencies": {
+    "@gorhill/ubo-core": "^0.1.30",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "wxt": "^0.21.1"
+  }
+}

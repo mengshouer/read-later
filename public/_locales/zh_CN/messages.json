@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Read Later",
+    "description": "Extension name."
+  },
+  "description": {
+    "message": "保存链接与阅读进度，按域名分组的待读队列。",
+    "description": "Extension description shown in the browser and the store."
+  },
+  "commandSaveCurrentTab": {
+    "message": "收纳当前标签页到待读列表",
+    "description": "Keyboard shortcut description on chrome://extensions/shortcuts."
+  }
+}

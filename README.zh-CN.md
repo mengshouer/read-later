@@ -37,7 +37,7 @@ $removeparam=fbclid                      全站剥掉 fbclid
 @@||example.com^$removeparam             永远不碰这个站
 ```
 
-<img src="docs/screenshots/options-filters.png" alt="Read Later Settings" width="800">
+<img src="docs/screenshots/options-tester.png" alt="Read Later Settings" width="800">
 
 设置页可以使用 URL 测试规则。
 

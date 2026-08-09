@@ -39,7 +39,7 @@ $removeparam=fbclid                      drop fbclid everywhere
 @@||example.com^$removeparam             never touch that site
 ```
 
-<img src="docs/screenshots/options-filters.png" alt="Read Later Settings" width="800">
+<img src="docs/screenshots/options-tester.png" alt="Read Later Settings" width="800">
 
 The settings page can test your rules against a URL.
 

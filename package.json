@@ -6,6 +6,14 @@
   "description": "Read Later — save links and reading position, grouped by domain",
   "author": "mengshouer",
   "license": "MIT",
+  "homepage": "https://github.com/mengshouer/read-later#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mengshouer/read-later.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mengshouer/read-later/issues"
+  },
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",

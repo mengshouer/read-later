@@ -49,9 +49,13 @@ $removeparam=fbclid                      全站剥掉 fbclid
 
 仅在订阅网络规则列表时请求对应网站权限。
 
+## 隐私
+
+待读列表和阅读位置只保存在浏览器本地的扩展存储中。完整的数据处理说明见
+[隐私政策](./docs/PRIVACY.md)。
+
 ## 计划
 
-- [ ] GitHub Actions 自动构建和发布
 - [ ] 上架 Chrome 应用商店
 
 ## 开发

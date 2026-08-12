@@ -52,9 +52,13 @@ unread list only.
 
 Permission to read a website is only requested when you subscribe to a rule list.
 
+## Privacy
+
+Your reading list and reading positions stay in the browser's local extension storage. See the
+[Privacy Policy](./docs/PRIVACY.md) for the complete data-handling details.
+
 ## Planned
 
-- [ ] GitHub Actions build and release
 - [ ] Chrome Web Store listing
 
 ## Development

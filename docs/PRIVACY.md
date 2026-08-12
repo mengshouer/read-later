@@ -1,6 +1,6 @@
 # Privacy Policy — Read Later
 
-Last updated: 2026-08-09
+Last updated: 2026-08-12
 
 Read Later is a browser extension that saves pages to a personal reading list and returns you to
 the position where you stopped reading. This policy describes everything it does with data.
@@ -51,6 +51,15 @@ Nothing else is sent anywhere. Specifically:
 - The extension contains no remotely hosted code. It does not download or execute code. A
   subscribed filter list is parsed as data — text rules that decide whether two URLs are the same
   page — and is never evaluated as code.
+
+## Chrome Web Store Limited Use
+
+Read Later's use of information received from Chrome APIs adheres to the Chrome Web Store User
+Data Policy, including the Limited Use requirements.
+
+Information is used only to provide the reading-list, reading-position, and user-configured URL
+deduplication features described in this policy. It is not transferred to third parties, used for
+advertising, used to determine creditworthiness, or accessed by humans.
 
 ## Permissions
 

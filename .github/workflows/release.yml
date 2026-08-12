@@ -1,0 +1,68 @@
+# Tag-triggered build and release.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Produces `.output/read-later-<version>-chrome.zip` and attaches it to a GitHub Release. That
+# zip is exactly what gets uploaded to the Chrome Web Store — the store has no API step here on
+# purpose: the first submission of a listing has to be done by hand anyway, and an automated
+# publish that silently ships a version nobody reviewed is the wrong default for an extension
+# whose whole promise is that it touches your browsing data locally and says so.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Only what creating the release needs.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to 10 for the same reason as ci.yml — reproducibility. See the longer note there
+      # for why the `overrides` block lives in pnpm-workspace.yaml rather than package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The tag is the only place the version is stated twice, and `wxt zip` names the artifact
+      # from package.json — so a tag that disagrees would publish `v0.2.0` containing 0.1.0, with
+      # a manifest the store then rejects as a duplicate version. Fail before building instead.
+      - name: Tag must match package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME implies version $tag, package.json says $pkg"
+            exit 1
+          fi
+          echo "version=$pkg" >> "$GITHUB_ENV"
+
+      # A tagged build is the one that must not be broken, so it re-runs both gates rather than
+      # trusting that CI already passed on this commit.
+      - run: pnpm compile
+      - run: pnpm test
+
+      - run: pnpm zip
+
+      # `gh` is preinstalled on the runner. `--generate-notes` writes the changelog from the
+      # commits since the previous tag, which is what the commit history here is already good for.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            ".output/read-later-${version}-chrome.zip"

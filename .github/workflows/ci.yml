@@ -1,0 +1,44 @@
+# Typecheck and tests on every push and pull request.
+#
+# `pnpm test` is safe to run here because the suite is offline and deterministic by design:
+# `scripts/filter-probe.mjs` downloads a list that changes weekly and is therefore NOT a test
+# (see its header), while `tests/ubo-differential.test.ts` pins uBO's behaviour through the
+# lockfile-pinned `@gorhill/ubo-core`. Nothing in `tests/` touches the network.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned for reproducibility, not to dodge a bug. The original reason to pin — pnpm 11
+      # refusing `install` over an ignored build script in `spawn-sync` — died with wxt 0.21.2,
+      # which dropped the orphaned `web-ext-run` subtree that `spawn-sync` hung off; pnpm 11 now
+      # installs this lockfile cleanly. Both versions were verified to resolve it identically,
+      # including the `overrides` block in `pnpm-workspace.yaml` (pnpm 11 ignores that block when
+      # it is written under the `pnpm` key in package.json, and says so; pnpm 10 still reads it
+      # there — which is exactly why it lives in pnpm-workspace.yaml, where both read it).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # `--frozen-lockfile` is the CI default, spelled out so a drifted lockfile fails here
+      # rather than being silently resolved into something nobody committed.
+      - run: pnpm install --frozen-lockfile
+
+      # `wxt prepare` runs via postinstall and generates `.wxt/tsconfig.json`, which the root
+      # tsconfig extends — so this step cannot run before the install above.
+      - run: pnpm compile
+
+      - run: pnpm test

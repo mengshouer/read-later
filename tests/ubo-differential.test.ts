@@ -150,6 +150,12 @@ test('|| anchors on the host, not on anything that merely precedes a separator',
   await agree('||example.com^$removeparam=id', 'https://example.com/a?id=1');
 });
 
+test('a domain anchor immediately followed by an end anchor is not match-all', async () => {
+  // The block matcher has no content blocks for `|||`; forgetting that the trailing `|` still
+  // constrains the match turned this degenerate pattern into a rule that fired on every URL.
+  await agree('|||$removeparam=id', 'https://example.com/a?id=1');
+});
+
 test('the host index and a plain linear scan cannot disagree', async () => {
   // The index is an optimisation; a single-rule difference between the two paths is silent, and
   // only an equivalence check catches it.

@@ -166,19 +166,51 @@ export interface ListMeta {
 }
 
 /**
+ * The header name, once the surrounding whitespace is gone. A single anchored quantifier over
+ * one character class — no second quantifier to share characters with, so it cannot backtrack
+ * super-linearly. That property is the whole point; see `parseListMeta`.
+ */
+const HEADER_NAME = /^[A-Za-z ]+$/;
+
+/**
  * Reads the `! Title:` / `! Version:` / `! Expires:` headers every filter list already
  * carries. This is why there is no metadata convention of our own to invent: the
  * ecosystem has one, `! Expires: 5 days` included, so a list gets to state its own
  * update frequency instead of us hardcoding a guess for it.
+ *
+ * SPLIT OUT OF ONE REGEX ON PURPOSE. This used to be
+ * `/^!\s*([A-Za-z ]+?)\s*:\s*(.+)$/`, where `\s*` and `[A-Za-z ]` both match a space — two
+ * quantifiers competing for the same characters, which is the textbook shape for quadratic
+ * backtracking. A line with no colon forces the engine to try every split: measured on
+ * `'!' + ' '.repeat(n) + 'X'`, n=2000 took 2.9 s and n=4000 took 22.9 s. `split(/\r?\n/, 100)`
+ * above caps the line COUNT and says nothing about line LENGTH, and this runs from
+ * `updateSubscription` *after* `validateListText` has already approved the body — so a remote
+ * list could hang the worker on a header it never even had to spell correctly. The same input
+ * is now 0 ms.
+ *
+ * Matching `:` by index instead removes the ambiguity rather than hiding it. Equivalence was
+ * checked before the swap, on the whole `ListMeta` output rather than on the regex: 34 curated
+ * spellings (`!Title:`, `! Title :`, `!  Homepage :`, `! Title\t:`, tabs inside the name,
+ * empty values, repeated headers) plus 400,000 fuzzed strings over `! : \t` and letters —
+ * zero differences. Two subtleties that equivalence depends on, both learned from a mismatch
+ * the check caught: the old `\s*` pair stripped whitespace on BOTH sides of the name (so
+ * `! Title\t: x` did parse, and trimming only the front broke it), while whitespace *inside*
+ * the name still disqualifies the line, because `[A-Za-z ]+?` never matched a tab.
  */
 export function parseListMeta(text: string): ListMeta {
   const meta: ListMeta = { title: null, version: null, expiresHours: null };
   const lines = text.split(/\r?\n/, 100);
   for (const line of lines) {
-    const header = /^!\s*([A-Za-z ]+?)\s*:\s*(.+)$/.exec(line.trim());
-    if (!header) continue;
-    const name = (header[1] as string).toLowerCase();
-    const value = (header[2] as string).trim();
+    const trimmed = line.trim();
+    if (trimmed.charCodeAt(0) !== 0x21 /* ! */) continue;
+    const colon = trimmed.indexOf(':');
+    if (colon < 0) continue;
+    const rawName = trimmed.slice(1, colon).trim();
+    if (rawName === '' || !HEADER_NAME.test(rawName)) continue;
+    const value = trimmed.slice(colon + 1).trim();
+    // The old pattern ended in `(.+)`, so a header with nothing after the colon was no header.
+    if (value === '') continue;
+    const name = rawName.toLowerCase();
     if (name === 'title' && meta.title === null) meta.title = value;
     else if (name === 'version' && meta.version === null) meta.version = value;
     else if (name === 'expires' && meta.expiresHours === null) {

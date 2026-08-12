@@ -34,6 +34,9 @@
  * they subscribed to, and `scripts/filter-probe.mjs` diffs this implementation
  * against uBO's real engine to keep the subset claim honest.
  */
+// Explicit extension for the same reason `utils/normalize.ts` uses one: `scripts/filter-probe.mjs`
+// loads this module graph with plain Node, which does not resolve extensionless specifiers.
+import { findUnsafeRegex } from './regex-safety.ts';
 
 /** Why a line was parsed but will not participate. */
 export type SkipBucket =
@@ -91,7 +94,7 @@ export interface Filter {
    */
   host: string | null;
   /** Run against the whole URL when the host alone cannot decide. */
-  urlTest: RegExp | null;
+  urlTest: PatternMatcher | null;
   includeDomains: string[];
   excludeDomains: string[];
   denyallow: string[];
@@ -147,9 +150,72 @@ function hostSuffixes(hostname: string): string[] {
   return out;
 }
 
-// ---------------------------------------------------------------- pattern → regex
+// ---------------------------------------------------------------- pattern → matcher
 
-const RE_META = /[.*+?^${}()|[\]\\]/g;
+/**
+ * A separator unit inside a block — the `^` of uBO syntax. A number, so it can never be
+ * confused with a literal character, which is always a one-character string.
+ */
+const SEPARATOR = 0;
+type Unit = string | typeof SEPARATOR;
+
+/**
+ * A pattern compiled into the maximal runs of contiguous units between its `*`s.
+ *
+ * The blocks are matched left to right, each at the earliest position at or after the end of
+ * the previous one — which is exactly what `*` means, "any sequence here". Greedy-earliest is
+ * optimal across a `*` gap, but the units WITHIN a block must be matched as one unit at every
+ * candidate offset rather than stepped through independently; a prototype that did the latter
+ * disagreed with the regex on `^z=*&var=`, which is what taught the distinction.
+ */
+interface BlockProgram {
+  /** `||` anchors at a domain-label boundary, `|` at the URL start, otherwise it floats. */
+  anchor: 'host' | 'start' | 'float';
+  blocks: Unit[][];
+  /** A trailing `|`: the last block has to end at the end of the URL. */
+  anchorEnd: boolean;
+  /** The pattern started with `*`, so even an anchored first block may float forward. */
+  leadingStar: boolean;
+  /** The pattern ended with `*`, which makes a trailing `|` vacuous. */
+  trailingStar: boolean;
+}
+
+/**
+ * How a compiled pattern gets evaluated: a real `RegExp` only when the author wrote one.
+ *
+ * WHY THE SUGAR IS NO LONGER A REGEX. Translating `*` to `.*` is the obvious thing and it is a
+ * denial of service. `*a*a*a*a*a*a*a*a*a*a*a*a*z` contains not one regex metacharacter — it is
+ * the documented wildcard, spelled the way the options page teaches it — but as `.*a.*a.*…z` it
+ * backtracks exponentially once the tail fails to match. Measured: that rule against a URL whose
+ * query holds 50 `a`s never returned in 15 seconds, while `compileFilters` reported it as an
+ * unremarkable `active: 1, skipped: 0` in 1 ms. `validateListText` accepts it too, so a
+ * subscribed list — re-fetched daily, unattended, and over cleartext http, since
+ * `permissionOrigin` allows it — could hang every single save with a 45-character line.
+ *
+ * A CAP ON THE NUMBER OF `*`s WAS THE OBVIOUS FIX AND IT DOES NOT WORK. Measured over AdGuard's
+ * 2,507 active rules the `*`-per-pattern histogram is 0:2246, 1:241, 2:15, 3:5 — so a cap of 3
+ * rejects nothing legitimate, and still permits 84 seconds on a 2,000-character URL. The only
+ * safe cap, 1, discards 20 real rules including the five amazon affiliate strippers. No setting
+ * is both semantically free and safe, because `*` genuinely means "any sequence" and the URL it
+ * is measured against has no bounded length.
+ *
+ * So the sugar compiles to a block program, which has nothing to backtrack: every block is
+ * located by a forward scan, giving O(blocks x url) with no exponent. The rule above becomes a
+ * 13-step scan and answers in 0 ms — still 0 ms with 4,000 characters of padding.
+ *
+ * EQUIVALENCE WAS MEASURED, NOT ASSUMED, before this replaced the regex: 956 patterns (916 from
+ * the live AdGuard list, the 9 bundled ones, 34 hand-built edge cases) x 25 URLs = 23,875
+ * comparisons, plus 300,000 randomly generated pattern/URL pairs over an alphabet chosen to
+ * exercise `||`, `|`, `^`, `*`, userinfo `@` and case folding. Zero differences.
+ * `tests/ubo-differential.test.ts` and `compileFilters`'s `noIndex` option are the standing
+ * version of that check.
+ *
+ * An author-written `/…/` pattern stays a `RegExp`: its source is arbitrary, so no structural
+ * rewrite can bound it. That path is guarded at compile time instead — see `findUnsafeRegex`.
+ */
+export type PatternMatcher =
+  | { kind: 'regex'; re: RegExp }
+  | { kind: 'blocks'; prog: BlockProgram };
 
 /**
  * uBO pattern syntax: a pattern wrapped in `/…/` is a regular expression; otherwise `||`
@@ -158,55 +224,205 @@ const RE_META = /[.*+?^${}()|[\]\\]/g;
  *
  * Case-insensitive, because uBO lowercases both the pattern and the URL before matching unless
  * `$match-case` is given — and `$match-case` is reported as unsupported, so such a rule never
- * reaches here. Compiling case-sensitively meant `||example.com/track/` missed `/TRACK/`.
+ * reaches here. Compiling case-sensitively meant `||example.com/track/` missed `/TRACK/`. The
+ * block program keeps that by lowercasing the units here and the URL once per `decideQuery`.
  */
-function patternToRegex(pattern: string): RegExp | null {
+function compilePattern(pattern: string): PatternMatcher | { error: 'malformed' | 'unsafe'; reason: string } {
   // A `/…/` pattern is a regex in uBO, not a literal. Escaping it produced a rule that counted
   // as active and could never match — the worst of both, since the options page said it was fine.
   if (pattern.length > 2 && pattern.startsWith('/') && pattern.endsWith('/')) {
+    const source = pattern.slice(1, -1);
     try {
-      return new RegExp(pattern.slice(1, -1), 'i');
+      // Compilation is safe; only matching can backtrack. Do it first so malformed syntax is
+      // reported as malformed rather than whatever partial shape the safety scanner happened to
+      // see before the JS parser rejected it.
+      const re = new RegExp(source, 'i');
+      const unsafe = findUnsafeRegex(source);
+      return unsafe ? { error: 'unsafe', reason: unsafe } : { kind: 'regex', re };
     } catch {
-      return null;
+      return { error: 'malformed', reason: 'malformed pattern' };
     }
   }
 
-  let src = '';
   let i = 0;
+  let anchor: BlockProgram['anchor'] = 'float';
   if (pattern.startsWith('||')) {
-    // `[^/?#]*\.` would also swallow `user@` in `https://example.com@evil.example.net/`, so a
-    // rule for one host fired on a request to a completely different one. Userinfo ends at the
-    // last `@` before the path, so the optional part before the host must exclude `@` as well.
-    // `(?:[^/?#]*@)?` alone is not enough: the engine happily backtracks to a zero-length
-    // userinfo and then matches the pattern INSIDE the credentials, so `||example.com` fired on
-    // `https://example.com@evil.example.net/` — a request to a completely different host. The
-    // lookahead forbids that by asserting no further `@` remains before the path.
-    src += '^[a-z][a-z0-9+.-]*://(?:[^/?#]*@)?(?![^/?#]*@)(?:[^/?#@]*\\.)?';
+    anchor = 'host';
     i = 2;
   } else if (pattern.startsWith('|')) {
-    src += '^';
+    anchor = 'start';
     i = 1;
   }
+
   let end = pattern.length;
   let anchorEnd = false;
   if (end > i && pattern.endsWith('|')) {
     end--;
     anchorEnd = true;
   }
+
+  const blocks: Unit[][] = [];
+  let current: Unit[] = [];
+  let leadingStar = false;
+  let trailingStar = false;
+  let seenAny = false;
   for (; i < end; i++) {
     const c = pattern[i] as string;
-    if (c === '*') src += '.*';
-    // A separator is anything outside the set of characters allowed in a hostname
-    // or path segment, or the end of the URL.
-    else if (c === '^') src += '(?:[^a-zA-Z0-9_\\-.%]|$)';
-    else src += c.replace(RE_META, '\\$&');
+    if (c === '*') {
+      if (!seenAny) leadingStar = true;
+      if (current.length) {
+        blocks.push(current);
+        current = [];
+      }
+      trailingStar = true;
+      seenAny = true;
+      continue;
+    }
+    seenAny = true;
+    trailingStar = false;
+    current.push(c === '^' ? SEPARATOR : c.toLowerCase());
   }
-  if (anchorEnd) src += '$';
-  try {
-    return new RegExp(src, 'i');
-  } catch {
-    return null;
+  if (current.length) blocks.push(current);
+
+  return { kind: 'blocks', prog: { anchor, blocks, anchorEnd, leadingStar, trailingStar } };
+}
+
+/**
+ * A separator is anything outside the set of characters allowed in a hostname or path segment.
+ * The end of the URL counts too, which is the `|$` half of the old `(?:[^a-zA-Z0-9_\-.%]|$)` and
+ * is handled by the callers as a zero-width match.
+ */
+function isSeparator(ch: string): boolean {
+  return !/[a-zA-Z0-9_\-.%]/.test(ch);
+}
+
+/** Match one block at exactly `at`. Returns the end offset, or -1. */
+function matchBlockAt(url: string, at: number, units: Unit[]): number {
+  let i = at;
+  for (let k = 0; k < units.length; k++) {
+    const unit = units[k] as Unit;
+    if (unit === SEPARATOR) {
+      // The `$` alternative: a separator may match the end of input without consuming anything.
+      // Any unit after it then fails on the `i >= url.length` check below, which is correct —
+      // the regex could not have matched past the end either.
+      if (i >= url.length) continue;
+      if (!isSeparator(url[i] as string)) return -1;
+      i++;
+    } else {
+      if (i >= url.length || url[i] !== unit) return -1;
+      i++;
+    }
   }
+  return i;
+}
+
+/** Earliest offset at or after `from` where the block matches. Returns its end, or -1. */
+function findBlock(url: string, from: number, units: Unit[]): number {
+  for (let at = from; at <= url.length; at++) {
+    const to = matchBlockAt(url, at, units);
+    if (to >= 0) return to;
+  }
+  return -1;
+}
+
+/** Latest offset at or after `from` where the block matches AND ends at the end of the URL. */
+function findBlockAtEnd(url: string, from: number, units: Unit[]): number {
+  for (let at = url.length; at >= from; at--) {
+    if (matchBlockAt(url, at, units) === url.length) return url.length;
+  }
+  return -1;
+}
+
+/**
+ * Where a `||` anchor may start, reproducing
+ *   ^[a-z][a-z0-9+.-]*://(?:[^/?#]*@)?(?![^/?#]*@)(?:[^/?#@]*\.)?
+ *
+ * `[^/?#]*\.` alone would swallow `user@` in `https://example.com@evil.example.net/`, so a rule
+ * for one host fired on a request to a completely different one. Userinfo ends at the LAST `@`
+ * before the path, and the regex's lookahead is what forces that — the engine would otherwise
+ * backtrack to a zero-length userinfo and match the pattern inside the credentials. Taking
+ * `lastIndexOf('@')` here is the same rule stated directly, which is why no lookahead is needed.
+ * The optional `(?:[^/?#@]*\.)?` is what lets `||example.com` match a subdomain, so every offset
+ * just past a dot in the host is a candidate as well.
+ */
+function hostAnchors(url: string): number[] {
+  const scheme = /^[a-z][a-z0-9+.-]*:\/\//.exec(url);
+  if (!scheme) return [];
+  let hostStart = (scheme[0] as string).length;
+  let pathStart = url.length;
+  for (let i = hostStart; i < url.length; i++) {
+    const c = url[i] as string;
+    if (c === '/' || c === '?' || c === '#') {
+      pathStart = i;
+      break;
+    }
+  }
+  const at = url.lastIndexOf('@', pathStart - 1);
+  if (at >= hostStart) hostStart = at + 1;
+  const offsets = [hostStart];
+  for (let i = hostStart; i < pathStart; i++) {
+    if (url[i] === '.') offsets.push(i + 1);
+  }
+  return offsets;
+}
+
+/** `url` must already be lowercased; see `compilePattern` on case folding. */
+function testBlocks(prog: BlockProgram, url: string): boolean {
+  const { anchor, blocks, anchorEnd, leadingStar, trailingStar } = prog;
+
+  // An empty pattern body — `||`, `|`, or nothing but `*`s. The regex was then just its anchor.
+  // The odd but valid `|||` is the one nontrivial case: domain anchor immediately followed by
+  // end anchor. It must not become match-all merely because there is no block between them.
+  if (blocks.length === 0) {
+    const starts = anchor === 'host' ? hostAnchors(url) : [0];
+    return anchorEnd && !trailingStar
+      ? starts.includes(url.length)
+      : anchor === 'host'
+        ? starts.length > 0
+        : true;
+  }
+
+  const starts = anchor === 'host' ? hostAnchors(url) : [0];
+  const firstFloats = anchor === 'float' || leadingStar;
+  const endAnchored = anchorEnd && !trailingStar;
+
+  for (const start of starts) {
+    if (blocks.length === 1) {
+      const only = blocks[0] as Unit[];
+      if (endAnchored) {
+        if ((firstFloats ? findBlockAtEnd(url, start, only) : matchBlockAt(url, start, only)) === url.length) {
+          return true;
+        }
+        continue;
+      }
+      if ((firstFloats ? findBlock(url, start, only) : matchBlockAt(url, start, only)) >= 0) return true;
+      continue;
+    }
+
+    let pos = firstFloats
+      ? findBlock(url, start, blocks[0] as Unit[])
+      : matchBlockAt(url, start, blocks[0] as Unit[]);
+    if (pos < 0) continue;
+    let ok = true;
+    for (let k = 1; k < blocks.length; k++) {
+      const units = blocks[k] as Unit[];
+      pos =
+        k === blocks.length - 1 && endAnchored
+          ? findBlockAtEnd(url, pos, units)
+          : findBlock(url, pos, units);
+      if (pos < 0) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return true;
+  }
+  return false;
+}
+
+/** `lowerUrl` is the lowercased form; only the block path needs it. */
+function testPattern(matcher: PatternMatcher, url: string, lowerUrl: string): boolean {
+  return matcher.kind === 'regex' ? matcher.re.test(url) : testBlocks(matcher.prog, lowerUrl);
 }
 
 // ---------------------------------------------------------------- option parsing
@@ -246,37 +462,61 @@ function splitOptions(raw: string): string[] {
  * survived then depended on how many there were: measured, `/utm_/g` over four `utm_*` params
  * removed the first and third.
  */
-function parseValue(raw: string | null): ValueMatcher | null {
+/** Either a usable matcher, or why the value was refused — the bucket differs by cause. */
+type ValueResult =
+  | { ok: true; matcher: ValueMatcher }
+  | { ok: false; bucket: SkipBucket; reason: string };
+
+const MALFORMED_VALUE: ValueResult = {
+  ok: false,
+  bucket: 'invalid',
+  reason: 'malformed $removeparam value',
+};
+
+function parseValue(raw: string | null): ValueResult {
   const trimmed = (raw ?? '').trim();
-  if (trimmed === '') return { kind: 'all' };
+  if (trimmed === '') return { ok: true, matcher: { kind: 'all' } };
 
   const negated = trimmed.charCodeAt(0) === 0x7e; /* ~ */
   const body = negated ? trimmed.slice(1) : trimmed;
-  if (body === '') return null;
+  if (body === '') return MALFORMED_VALUE;
 
   const asRegex = /^\/(.+)\/(i)?$/.exec(body);
   if (asRegex) {
+    const source = asRegex[1] as string;
+    // The same guard a `/…/` pattern gets, for the same reason: this source is author-supplied,
+    // and the `try/catch` below only sees a SYNTAX error. `$removeparam=/(a+)+z/` was the
+    // shortest hang found — 21 characters, and because its pattern half is empty it lands in
+    // `index.always`, so it runs on every saved URL rather than on one site.
     try {
-      const re = new RegExp(asRegex[1] as string, asRegex[2] ?? '');
-      return negated ? { kind: 'not-regex', re } : { kind: 'regex', re };
+      const re = new RegExp(source, asRegex[2] ?? '');
+      const unsafe = findUnsafeRegex(source);
+      if (unsafe) return { ok: false, bucket: 'unsupported', reason: `unsafe regex: ${unsafe}` };
+      return { ok: true, matcher: negated ? { kind: 'not-regex', re } : { kind: 'regex', re } };
     } catch {
-      return null;
+      return MALFORMED_VALUE;
     }
   }
 
   if (body.startsWith('|')) {
+    const source = `^${body.slice(1)}`;
     try {
-      const re = new RegExp(`^${body.slice(1)}`, 'i');
-      return negated ? { kind: 'not-regex', re } : { kind: 'regex', re };
+      const re = new RegExp(source, 'i');
+      const unsafe = findUnsafeRegex(source);
+      if (unsafe) return { ok: false, bucket: 'unsupported', reason: `unsafe regex: ${unsafe}` };
+      return { ok: true, matcher: negated ? { kind: 'not-regex', re } : { kind: 'regex', re } };
     } catch {
-      return null;
+      return MALFORMED_VALUE;
     }
   }
 
   // uBO: "Multiple values not supported (because very inefficient)" — the directive is discarded.
-  if (body.includes('|')) return null;
+  if (body.includes('|')) return MALFORMED_VALUE;
 
-  return negated ? { kind: 'not-name', name: body } : { kind: 'name', name: body };
+  return {
+    ok: true,
+    matcher: negated ? { kind: 'not-name', name: body } : { kind: 'name', name: body },
+  };
 }
 
 /**
@@ -361,10 +601,9 @@ export function parseFilterLine(raw: string, line: number, source: string): Line
       if (negated) return { ok: false, bucket: 'unsupported', reason: '~removeparam' };
       seenRemoveparam = true;
       valueText = (argument ?? '').trim();
-      value = parseValue(argument);
-      if (value === null) {
-        return { ok: false, bucket: 'invalid', reason: 'malformed $removeparam value' };
-      }
+      const parsed = parseValue(argument);
+      if (!parsed.ok) return { ok: false, bucket: parsed.bucket, reason: parsed.reason };
+      value = parsed.matcher;
       continue;
     }
 
@@ -476,14 +715,22 @@ export function parseFilterLine(raw: string, line: number, source: string): Line
   // into the label, so `||example.com` also matches `example.computer`. Only the
   // former can be settled by the host index alone.
   let host: string | null = null;
-  let urlTest: RegExp | null = null;
+  let urlTest: PatternMatcher | null = null;
   const hostOnly = /^\|\|([a-z0-9.\-_]+)\^$/i.exec(pattern);
   if (hostOnly) {
     host = (hostOnly[1] as string).toLowerCase();
   } else if (pattern !== '' && pattern !== '*') {
-    urlTest = patternToRegex(pattern);
-    if (urlTest === null) return { ok: false, bucket: 'invalid', reason: 'malformed pattern' };
-    // Still worth indexing when the pattern starts at a concrete host: the regex then
+    const compiled = compilePattern(pattern);
+    if ('error' in compiled) {
+      // `unsafe` is a rule uBO honours and we decline, which is what `unsupported` means here;
+      // `malformed` is genuinely broken syntax. Reporting the difference matters because only
+      // one of the two is something the author can fix by rewriting the rule.
+      return compiled.error === 'unsafe'
+        ? { ok: false, bucket: 'unsupported', reason: `unsafe regex: ${compiled.reason}` }
+        : { ok: false, bucket: 'invalid', reason: 'malformed pattern' };
+    }
+    urlTest = compiled;
+    // Still worth indexing when the pattern starts at a concrete host: the matcher then
     // only has to run for URLs already on that host.
     const anchored = /^\|\|([a-z0-9.\-_]+)[/^?]/i.exec(pattern);
     if (anchored) host = (anchored[1] as string).toLowerCase();
@@ -543,9 +790,12 @@ export function compileFilters(
       }
       const filter = result.filter;
       if (options.noIndex && filter.host !== null) {
-        // The pattern regex subsumes the host check, so dropping the index key leaves
+        // The pattern matcher subsumes the host check, so dropping the index key leaves
         // an equivalent filter — which is exactly what makes the two paths comparable.
-        filter.urlTest = filter.urlTest ?? patternToRegex(filter.pattern);
+        if (filter.urlTest === null) {
+          const recompiled = compilePattern(filter.pattern);
+          if (!('error' in recompiled)) filter.urlTest = recompiled;
+        }
         filter.host = null;
       }
       const index = filter.exception ? out.allow : out.block;
@@ -650,8 +900,8 @@ export function formatLineRanges(lines: number[]): string {
 
 // ---------------------------------------------------------------- matching
 
-function applies(filter: Filter, url: string, hostname: string): boolean {
-  if (filter.urlTest !== null && !filter.urlTest.test(url)) return false;
+function applies(filter: Filter, url: string, lowerUrl: string, hostname: string): boolean {
+  if (filter.urlTest !== null && !testPattern(filter.urlTest, url, lowerUrl)) return false;
   if (filter.includeDomains.length > 0 && !filter.includeDomains.some((d) => hostMatches(d, hostname))) {
     return false;
   }
@@ -664,20 +914,20 @@ function applies(filter: Filter, url: string, hostname: string): boolean {
  * Every filter in `index` that applies to this URL. The host index is a prefilter
  * only — `applies` still runs, because an indexed filter can carry `$domain=`.
  */
-function collect(index: Index, url: string, hostname: string): Filter[] {
+function collect(index: Index, url: string, lowerUrl: string, hostname: string): Filter[] {
   const found: Filter[] = [];
   for (const filter of index.always) {
-    if (applies(filter, url, hostname)) found.push(filter);
+    if (applies(filter, url, lowerUrl, hostname)) found.push(filter);
   }
   for (const suffix of hostSuffixes(hostname)) {
     const bucket = index.byHost.get(suffix);
     if (!bucket) continue;
     for (const filter of bucket) {
-      if (applies(filter, url, hostname)) found.push(filter);
+      if (applies(filter, url, lowerUrl, hostname)) found.push(filter);
     }
   }
   for (const filter of index.generic) {
-    if (applies(filter, url, hostname)) found.push(filter);
+    if (applies(filter, url, lowerUrl, hostname)) found.push(filter);
   }
   return found;
 }
@@ -824,9 +1074,13 @@ export function decideQuery(
   const decision: QueryDecision = { keep: params.map(() => true), removedBy: [], sparedBy: [] };
   if (params.length === 0) return decision;
 
-  const blocks = collect(compiled.block, url, hostname);
+  // Lowercased once, not once per filter: the block matcher needs it and the flagship list
+  // carries 2,507 rules, every one of which `collect` may reach for a single URL.
+  const lowerUrl = url.toLowerCase();
+
+  const blocks = collect(compiled.block, url, lowerUrl, hostname);
   if (blocks.length === 0) return decision;
-  const allows = collect(compiled.allow, url, hostname);
+  const allows = collect(compiled.allow, url, lowerUrl, hostname);
 
   // A bare `@@…$removeparam` disables removal on this URL outright, which is the
   // idiomatic "never touch this site" escape hatch.

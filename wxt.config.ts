@@ -17,6 +17,10 @@ export default defineConfig({
     default_locale: 'en',
     name: '__MSG_name__',
     description: '__MSG_description__',
+    // Rendered as the "Website" link on the store listing and on `chrome://extensions`.
+    // Not localised: `__MSG_*__` substitution does not apply to this key, and the repo is
+    // one address in either language anyway.
+    homepage_url: 'https://github.com/mengshouer/read-later',
     permissions: [
       'contextMenus',
       'storage',

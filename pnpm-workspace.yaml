@@ -1,0 +1,9 @@
+# Not a workspace definition — this is where pnpm 11 reads settings that used to live under the
+# `pnpm` key in package.json. Verified: pnpm 11 warns `The "pnpm" field in package.json is no
+# longer read by pnpm` and ignores overrides written there, while pnpm 10 still honours them —
+# so putting this in package.json would silently produce two different dependency trees.
+overrides:
+  # postcss's own range widened to nanoid ^3.3.17 in 8.5.26 (8.5.25 and earlier ask for ^3.3.16),
+  # and vite declares postcss ^8.5.17, so this takes a patched release the parent already permits
+  # rather than forcing one it does not. Closes GHSA nanoid <3.3.17.
+  postcss: ^8.5.26

@@ -4,18 +4,14 @@ _[中文文档](./README.zh-CN.md)_
 
 A temporary bookmark for reading later.
 
+Click the image below to install Read Later from the Chrome Web Store.
+
+[![Available in the Chrome Web Store](./docs/chrome-web-store-badge.png)](https://chromewebstore.google.com/detail/read-later/gfmiooeigdpplnkpgklflkfneaglfbch)
+
 <img src="docs/screenshots/popup.png" alt="Read Later popup" width="380">
 
 Right-click a page or a link, choose "Read Later", and it is saved with a best-effort reading
 position. Click the item later and it will try to return to where you stopped.
-
-## Install
-
-```bash
-pnpm install && pnpm build
-```
-
-Then `chrome://extensions` → **Developer mode** → **Load unpacked** → pick `.output/chrome-mv3/`.
 
 ## Reading positions
 
@@ -57,10 +53,6 @@ Permission to read a website is only requested when you subscribe to a rule list
 Your reading list and reading positions stay in the browser's local extension storage. See the
 [Privacy Policy](./docs/PRIVACY.md) for the complete data-handling details.
 
-## Planned
-
-- [ ] Chrome Web Store listing
-
 ## Development
 
 ```bash
@@ -69,6 +61,9 @@ pnpm dev        # a Chrome with the extension loaded, hot-reloading
 pnpm build      # → .output/chrome-mv3/
 pnpm test
 ```
+
+To load the built extension manually, run `pnpm build`, then open `chrome://extensions`, enable
+**Developer mode**, choose **Load unpacked**, and select `.output/chrome-mv3/`.
 
 WXT + Preact + TypeScript.
 

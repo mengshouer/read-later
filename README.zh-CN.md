@@ -4,17 +4,13 @@ _[English](./README.md)_
 
 一个用于稍后阅读的临时书签。
 
+点击下方图片，从 Chrome 应用商店安装 Read Later。
+
+[![从 Chrome 应用商店安装 Read Later](./docs/chrome-web-store-badge.png)](https://chromewebstore.google.com/detail/read-later/gfmiooeigdpplnkpgklflkfneaglfbch)
+
 <img src="docs/screenshots/popup.png" alt="Read Later popup" width="380">
 
 右键页面或链接打开右键菜单后，选择「Read Later」即可保存页面和尽力恢复的阅读位置。再次点击条目时，会尝试返回你上次阅读的位置。
-
-## 安装
-
-```bash
-pnpm install && pnpm build
-```
-
-然后 `chrome://extensions` → 打开**开发者模式** → **加载已解压的扩展程序** → 选 `.output/chrome-mv3/`。
 
 ## 阅读位置
 
@@ -54,10 +50,6 @@ $removeparam=fbclid                      全站剥掉 fbclid
 待读列表和阅读位置只保存在浏览器本地的扩展存储中。完整的数据处理说明见
 [隐私政策](./docs/PRIVACY.md)。
 
-## 计划
-
-- [ ] 上架 Chrome 应用商店
-
 ## 开发
 
 ```bash
@@ -66,6 +58,9 @@ pnpm dev        # 开一个带扩展的 Chrome，改代码自动重载
 pnpm build      # → .output/chrome-mv3/
 pnpm test
 ```
+
+若要手动加载构建产物，先运行 `pnpm build`，再打开 `chrome://extensions`，启用**开发者模式**，
+选择**加载已解压的扩展程序**，然后选择 `.output/chrome-mv3/`。
 
 WXT + Preact + TypeScript。
 
